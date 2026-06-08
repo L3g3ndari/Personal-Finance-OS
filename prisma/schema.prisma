@@ -1,0 +1,374 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  password      String
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  budgets       Budget[]
+  dashboards    Dashboard[]
+  goals         Goal[]
+  bills         Bill[]
+  strategies    Strategy[]
+  journals      DecisionJournal[]
+  healthScores  HealthScore[]
+  forecasts     Forecast[]
+  taxEntries    TaxEntry[]
+  cashFlows     CashFlowEntry[]
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  CREDIT_CARD
+  LOAN
+  MORTGAGE
+  BROKERAGE
+  IRA
+  ROTH_IRA
+  FOUR_HUNDRED_ONE_K
+  HSA
+  CRYPTO
+  CASH
+  CUSTOM
+}
+
+model Account {
+  id            String    @id @default(cuid())
+  name          String
+  type          AccountType
+  institution   String?
+  currency      String    @default("USD")
+  balance       Decimal   @default(0) @db.Decimal(19, 4)
+  isActive      Boolean   @default(true)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  balances      AccountBalance[]
+  transactions  Transaction[]
+  investments   Investment[]
+
+  @@index([userId])
+}
+
+model AccountBalance {
+  id            String    @id @default(cuid())
+  accountId     String
+  account       Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  balance       Decimal   @db.Decimal(19, 4)
+  date          DateTime  @default(now())
+
+  @@index([accountId, date])
+}
+
+model Transaction {
+  id            String    @id @default(cuid())
+  accountId     String
+  account       Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  amount        Decimal   @db.Decimal(19, 4)
+  date          DateTime
+  description   String
+  payee         String?
+  notes         String?
+  isPending     Boolean   @default(false)
+  categoryId    String?
+  category      TransactionCategory? @relation(fields: [categoryId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tags          TransactionTag[]
+  splits        TransactionSplit[]
+
+  @@index([accountId, date])
+  @@index([categoryId])
+}
+
+model TransactionSplit {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  amount        Decimal     @db.Decimal(19, 4)
+  categoryId    String?
+  category      TransactionCategory? @relation(fields: [categoryId], references: [id])
+  notes         String?
+}
+
+model TransactionCategory {
+  id            String    @id @default(cuid())
+  name          String
+  type          CategoryType
+  parentId      String?
+  parent        TransactionCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children      TransactionCategory[] @relation("CategoryHierarchy")
+  
+  transactions  Transaction[]
+  splits        TransactionSplit[]
+  budgetLimits  BudgetCategory[]
+
+  @@unique([name, parentId])
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+model TransactionTag {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  transactions  Transaction[]
+}
+
+enum BudgetType {
+  TRADITIONAL
+  ZERO_BASED
+  ENVELOPE
+}
+
+enum BudgetPeriod {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+model Budget {
+  id            String    @id @default(cuid())
+  name          String
+  type          BudgetType
+  period        BudgetPeriod
+  startDate     DateTime
+  endDate       DateTime?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  categories    BudgetCategory[]
+
+  @@index([userId])
+}
+
+model BudgetCategory {
+  id            String    @id @default(cuid())
+  budgetId      String
+  budget        Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  categoryId    String
+  category      TransactionCategory @relation(fields: [categoryId], references: [id])
+  limit         Decimal   @db.Decimal(19, 4)
+  
+  @@unique([budgetId, categoryId])
+}
+
+model Dashboard {
+  id            String    @id @default(cuid())
+  name          String
+  isDefault     Boolean   @default(false)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  widgets       DashboardWidget[]
+
+  @@index([userId])
+}
+
+model DashboardWidget {
+  id            String    @id @default(cuid())
+  dashboardId   String
+  dashboard     Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  type          String
+  title         String?
+  config        Json?
+  x             Int
+  y             Int
+  w             Int
+  h             Int
+}
+
+model Goal {
+  id            String    @id @default(cuid())
+  name          String
+  targetAmount  Decimal   @db.Decimal(19, 4)
+  currentAmount Decimal   @default(0) @db.Decimal(19, 4)
+  deadline      DateTime?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+enum AssetType {
+  STOCK
+  ETF
+  MUTUAL_FUND
+  BOND
+  REIT
+  CRYPTO
+  OTHER
+}
+
+model Investment {
+  id            String    @id @default(cuid())
+  accountId     String
+  account       Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  symbol        String
+  name          String
+  type          AssetType
+  quantity      Decimal   @db.Decimal(19, 4)
+  costBasis     Decimal   @db.Decimal(19, 4)
+  currentPrice  Decimal?  @db.Decimal(19, 4)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  transactions  InvestmentTransaction[]
+
+  @@index([accountId])
+}
+
+enum InvTransType {
+  BUY
+  SELL
+  DIVIDEND
+  SPLIT
+}
+
+model InvestmentTransaction {
+  id            String      @id @default(cuid())
+  investmentId  String
+  investment    Investment  @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  type          InvTransType
+  date          DateTime
+  quantity      Decimal     @db.Decimal(19, 4)
+  price         Decimal     @db.Decimal(19, 4)
+  fees          Decimal     @default(0) @db.Decimal(19, 4)
+  totalAmount   Decimal     @db.Decimal(19, 4)
+
+  @@index([investmentId, date])
+}
+
+model Bill {
+  id            String    @id @default(cuid())
+  name          String
+  amount        Decimal   @db.Decimal(19, 4)
+  dueDate       DateTime
+  frequency     String    // e.g., "monthly", "yearly"
+  isAutoPay     Boolean   @default(false)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Strategy {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  type          String    // e.g., "DEBT_PAYOFF", "RETIREMENT"
+  config        Json?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  milestones    StrategyMilestone[]
+
+  @@index([userId])
+}
+
+model StrategyMilestone {
+  id            String    @id @default(cuid())
+  strategyId    String
+  strategy      Strategy  @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  name          String
+  targetDate    DateTime?
+  isCompleted   Boolean   @default(false)
+}
+
+model DecisionJournal {
+  id            String    @id @default(cuid())
+  title         String
+  date          DateTime  @default(now())
+  reasoning     String
+  expectedOutcome String?
+  actualOutcome   String?
+  reviewDate      DateTime?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model HealthScore {
+  id            String    @id @default(cuid())
+  score         Int
+  date          DateTime  @default(now())
+  details       Json?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+}
+
+model CashFlowEntry {
+  id            String    @id @default(cuid())
+  date          DateTime
+  income        Decimal   @db.Decimal(19, 4)
+  expenses      Decimal   @db.Decimal(19, 4)
+  savings       Decimal   @db.Decimal(19, 4)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+}
+
+model Forecast {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    // e.g., "MONTE_CARLO", "RETIREMENT"
+  parameters    Json
+  results       Json
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model TaxEntry {
+  id            String    @id @default(cuid())
+  year          Int
+  type          String    // e.g., "W2", "1099", "DEDUCTION"
+  amount        Decimal   @db.Decimal(19, 4)
+  notes         String?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId, year])
+}
